@@ -5,11 +5,12 @@ import socket
 import sys
 import tkinter as tk
 from tkinter import scrolledtext
+from src import commands
 from src.vfs import VirtualFileSystem
 
 
 class ShellEmulator:
-    """Graphical OS shell emulator with in-memory VFS support."""
+    """Graphical OS shell emulator with UNIX-like command execution."""
 
     def __init__(
         self,
@@ -102,6 +103,22 @@ class ShellEmulator:
         expanded = os.path.expandvars(line)
         return expanded.split()
 
+    def dispatch_command(
+        self, cmd: str, args: list[str]
+    ) -> tuple[bool, str] | None:
+        """Dispatch command name to corresponding handler function."""
+        handlers = {
+            "ls": lambda: commands.cmd_ls(self.vfs, self.cwd, args),
+            "cd": lambda: commands.cmd_cd(self.vfs, self.cwd, args),
+            "pwd": lambda: commands.cmd_pwd(self.cwd, args),
+            "who": lambda: commands.cmd_who(args),
+            "du": lambda: commands.cmd_du(self.vfs, self.cwd, args),
+            "vfs-info": lambda: (True, self.get_vfs_info()),
+            "help": lambda: (True, self.get_help_text()),
+        }
+        handler = handlers.get(cmd)
+        return handler() if handler else None
+
     def execute_command(self, line: str) -> bool:
         """Execute parsed commands and return True if successful."""
         if not line:
@@ -113,37 +130,24 @@ class ShellEmulator:
         if cmd == "exit":
             self.root.quit()
             return True
-        if cmd == "help":
-            self.cmd_help()
-            return True
-        if cmd == "vfs-info":
-            self.cmd_vfs_info()
-            return True
-        if cmd in ("ls", "cd"):
-            return self.handle_stub_vfs_cmd(cmd, args)
+
+        result = self.dispatch_command(cmd, args)
+        if result is not None:
+            success, output = result
+            if output:
+                self.print_output(output)
+            return success
 
         self.print_output(
             f"Error: unknown command or invalid arguments: {cmd}\n"
         )
         return False
 
-    def handle_stub_vfs_cmd(self, cmd: str, args: list[str]) -> bool:
-        """Validate target path in VFS for stubbed ls and cd commands."""
-        target = args[0] if args else "."
-        node, _ = self.vfs.resolve_path(self.cwd, target)
-        if node is None:
-            self.print_output(f"{cmd}: {target}: No such file or directory\n")
-            return False
-        self.print_output(f"Command: {cmd}, Arguments: {args}\n")
-        return True
-
-    def cmd_vfs_info(self) -> None:
-        """Display memory status of the loaded Virtual File System."""
+    def get_vfs_info(self) -> str:
+        """Return memory status string of the loaded VFS."""
         dirs, files = self.vfs.count_nodes()
         source = self.vfs.loaded_from or "Empty in-memory root"
-        self.print_output(
-            f"VFS Source: {source}\nDirectories: {dirs}, Files: {files}\n"
-        )
+        return f"VFS Source: {source}\nDirectories: {dirs}, Files: {files}\n"
 
     def run_startup_script(self) -> None:
         """Execute commands from startup script, stopping on first error."""
@@ -172,17 +176,19 @@ class ShellEmulator:
                     return
         self.print_prompt()
 
-    def cmd_help(self) -> None:
-        """Display list of available commands and descriptions."""
-        help_text = (
+    def get_help_text(self) -> str:
+        """Return formatted list of all available commands."""
+        return (
             "Available commands:\n"
-            "  ls [path] - List directory contents (stub with VFS check)\n"
-            "  cd [path] - Change directory (stub with VFS check)\n"
-            "  vfs-info  - Show in-memory VFS statistics\n"
-            "  help      - Show this help message\n"
-            "  exit      - Exit the emulator\n"
+            "  ls [-l] [path] - List directory contents\n"
+            "  cd [path]      - Change current working directory\n"
+            "  pwd            - Print current working directory\n"
+            "  du [-s] [path] - Estimate file and directory space usage\n"
+            "  who            - Show who is logged on\n"
+            "  vfs-info       - Show in-memory VFS statistics\n"
+            "  help           - Show this help message\n"
+            "  exit           - Exit the emulator\n"
         )
-        self.print_output(help_text)
 
 
 def parse_cli_args(argv: list[str]) -> argparse.Namespace:

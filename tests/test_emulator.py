@@ -3,49 +3,51 @@ import tempfile
 import tkinter as tk
 import unittest
 from src.emulator import ShellEmulator
-from src.vfs import VirtualFileSystem
 
 
-class TestVirtualFileSystem(unittest.TestCase):
-    """Unit tests for in-memory Virtual File System operations."""
+class TestBasicCommands(unittest.TestCase):
+    """Unit tests for ls, cd, pwd, du, and who commands."""
 
     def setUp(self) -> None:
-        """Create temporary 3-level directory structure for VFS tests."""
+        """Create temporary 3-level VFS structure and emulator instance."""
         self.temp_dir = tempfile.TemporaryDirectory()
         base = self.temp_dir.name
-        level3 = os.path.join(base, "dir1", "dir2", "dir3")
-        os.makedirs(level3)
-        with open(os.path.join(base, "root.txt"), "w", encoding="utf-8") as f:
-            f.write("root content")
-        with open(os.path.join(level3, "deep.txt"), "w", encoding="utf-8") as f:
-            f.write("deep content")
+        level2 = os.path.join(base, "dir1", "dir2")
+        os.makedirs(level2)
+        with open(os.path.join(base, "a.txt"), "wb") as file_a:
+            file_a.write(b"12345")
+        with open(os.path.join(level2, "b.txt"), "wb") as file_b:
+            file_b.write(b"1234567890")
+
+        self.root = tk.Tk()
+        self.emu = ShellEmulator(self.root, vfs_path=base)
 
     def tearDown(self) -> None:
-        """Clean up temporary test directory."""
+        """Destroy GUI root and clean up temporary directory."""
+        self.root.destroy()
         self.temp_dir.cleanup()
 
-    def test_load_multilevel_vfs_in_memory(self) -> None:
-        """Test loading 3-level hierarchy into memory and resolving paths."""
-        vfs = VirtualFileSystem()
-        vfs.load_from_disk(self.temp_dir.name)
-        dirs, files = vfs.count_nodes()
-        self.assertEqual(dirs, 4)
-        self.assertEqual(files, 2)
+    def test_cd_and_pwd(self) -> None:
+        """Test directory navigation and pwd output."""
+        self.assertTrue(self.emu.execute_command("cd dir1/dir2"))
+        self.assertEqual(self.emu.get_cwd_str(), "/dir1/dir2")
+        self.assertTrue(self.emu.execute_command("pwd"))
+        output = self.emu.text_area.get("1.0", tk.END)
+        self.assertIn("/dir1/dir2\n", output)
 
-        node, parts = vfs.resolve_path([], "dir1/dir2/dir3/deep.txt")
-        self.assertIsNotNone(node)
-        self.assertEqual(parts, ["dir1", "dir2", "dir3", "deep.txt"])
-        self.assertEqual(node.content, b"deep content")
+        self.assertTrue(self.emu.execute_command("cd .."))
+        self.assertEqual(self.emu.get_cwd_str(), "/dir1")
+        self.assertFalse(self.emu.execute_command("cd missing"))
 
-    def test_emulator_vfs_error_handling(self) -> None:
-        """Test emulator handles missing VFS paths gracefully."""
-        root = tk.Tk()
-        try:
-            emu = ShellEmulator(root, vfs_path=self.temp_dir.name)
-            self.assertTrue(emu.execute_command("ls dir1/dir2"))
-            self.assertFalse(emu.execute_command("cd dir1/missing"))
-        finally:
-            root.destroy()
+    def test_ls_and_du_and_who(self) -> None:
+        """Test ls, du, and who outputs on in-memory VFS."""
+        self.assertTrue(self.emu.execute_command("ls -l"))
+        self.assertTrue(self.emu.execute_command("du -s"))
+        self.assertTrue(self.emu.execute_command("who"))
+        output = self.emu.text_area.get("1.0", tk.END)
+        self.assertIn("a.txt", output)
+        self.assertIn("15\t.", output)
+        self.assertIn("pts/0", output)
 
 
 if __name__ == "__main__":

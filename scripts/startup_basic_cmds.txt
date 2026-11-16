@@ -1,0 +1,15 @@
+help
+who
+pwd
+ls
+ls -l
+du
+du -s level1
+cd level1/level2
+pwd
+ls -l
+cd ..
+pwd
+cd /
+pwd
+cd invalid_directory

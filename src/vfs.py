@@ -51,10 +51,7 @@ class VirtualFileSystem:
         self, cwd: list[str], target_path: str
     ) -> tuple[VFSNode | None, list[str]]:
         """Resolve a relative or absolute VFS path to its node and parts."""
-        if target_path.startswith("/"):
-            parts: list[str] = []
-        else:
-            parts = list(cwd)
+        parts = [] if target_path.startswith("/") else list(cwd)
 
         for token in target_path.split("/"):
             if not token or token == ".":
@@ -82,3 +79,12 @@ class VirtualFileSystem:
             dirs += sub_dirs
             files += sub_files
         return dirs, files
+
+    def get_size(self, node: VFSNode) -> int:
+        """Calculate total byte size of a file or directory recursively."""
+        if not node.is_dir:
+            return len(node.content)
+        total = 0
+        for child in node.children.values():
+            total += self.get_size(child)
+        return total

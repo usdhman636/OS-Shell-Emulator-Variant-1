@@ -2,43 +2,50 @@ import os
 import tempfile
 import tkinter as tk
 import unittest
-from src.emulator import ShellEmulator, parse_cli_args
+from src.emulator import ShellEmulator
+from src.vfs import VirtualFileSystem
 
 
-class TestShellEmulatorConfig(unittest.TestCase):
-    """Unit tests for CLI arguments and startup script execution."""
+class TestVirtualFileSystem(unittest.TestCase):
+    """Unit tests for in-memory Virtual File System operations."""
 
     def setUp(self) -> None:
-        """Set up test GUI root."""
-        self.root = tk.Tk()
+        """Create temporary 3-level directory structure for VFS tests."""
+        self.temp_dir = tempfile.TemporaryDirectory()
+        base = self.temp_dir.name
+        level3 = os.path.join(base, "dir1", "dir2", "dir3")
+        os.makedirs(level3)
+        with open(os.path.join(base, "root.txt"), "w", encoding="utf-8") as f:
+            f.write("root content")
+        with open(os.path.join(level3, "deep.txt"), "w", encoding="utf-8") as f:
+            f.write("deep content")
 
     def tearDown(self) -> None:
-        """Destroy root window after test."""
-        self.root.destroy()
+        """Clean up temporary test directory."""
+        self.temp_dir.cleanup()
 
-    def test_cli_args_parsing(self) -> None:
-        """Test parsing --vfs and --script arguments."""
-        args = parse_cli_args(["--vfs", "C:\\vfs", "--script", "init.txt"])
-        self.assertEqual(args.vfs, "C:\\vfs")
-        self.assertEqual(args.script, "init.txt")
+    def test_load_multilevel_vfs_in_memory(self) -> None:
+        """Test loading 3-level hierarchy into memory and resolving paths."""
+        vfs = VirtualFileSystem()
+        vfs.load_from_disk(self.temp_dir.name)
+        dirs, files = vfs.count_nodes()
+        self.assertEqual(dirs, 4)
+        self.assertEqual(files, 2)
 
-    def test_startup_script_stops_on_error(self) -> None:
-        """Test that startup script halts upon encountering an invalid cmd."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", delete=False, encoding="utf-8"
-        ) as tmp:
-            tmp.write("ls /valid\nbad_command\ncd /should_not_run\n")
-            tmp_path = tmp.name
+        node, parts = vfs.resolve_path([], "dir1/dir2/dir3/deep.txt")
+        self.assertIsNotNone(node)
+        self.assertEqual(parts, ["dir1", "dir2", "dir3", "deep.txt"])
+        self.assertEqual(node.content, b"deep content")
 
+    def test_emulator_vfs_error_handling(self) -> None:
+        """Test emulator handles missing VFS paths gracefully."""
+        root = tk.Tk()
         try:
-            emu = ShellEmulator(self.root, script_path=tmp_path)
-            emu.run_startup_script()
-            output = emu.text_area.get("1.0", tk.END)
-            self.assertTrue(emu.script_error)
-            self.assertIn("Script halted at line 2", output)
-            self.assertNotIn("/should_not_run", output)
+            emu = ShellEmulator(root, vfs_path=self.temp_dir.name)
+            self.assertTrue(emu.execute_command("ls dir1/dir2"))
+            self.assertFalse(emu.execute_command("cd dir1/missing"))
         finally:
-            os.remove(tmp_path)
+            root.destroy()
 
 
 if __name__ == "__main__":

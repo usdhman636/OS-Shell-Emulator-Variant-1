@@ -10,6 +10,7 @@ test:
 
 demo:
 	cmd /c scripts\test_all_params.bat
+	cmd /c scripts\test_vfs_variants.bat
 
 clean:
 	$(PYTHON) -c "[__import__('shutil').rmtree(p, ignore_errors=True) \

@@ -5,10 +5,11 @@ import socket
 import sys
 import tkinter as tk
 from tkinter import scrolledtext
+from src.vfs import VirtualFileSystem
 
 
 class ShellEmulator:
-    """Graphical OS shell emulator supporting CLI args and startup scripts."""
+    """Graphical OS shell emulator with in-memory VFS support."""
 
     def __init__(
         self,
@@ -16,11 +17,13 @@ class ShellEmulator:
         vfs_path: str | None = None,
         script_path: str | None = None,
     ) -> None:
-        """Initialize the main window, debug config, and UI components."""
+        """Initialize main window, load VFS into memory, and set up UI."""
         self.root = root
         self.vfs_path = vfs_path
         self.script_path = script_path
         self.script_error = False
+        self.vfs = VirtualFileSystem()
+        self.cwd: list[str] = []
 
         user = getpass.getuser()
         host = socket.gethostname()
@@ -28,7 +31,7 @@ class ShellEmulator:
         self.root.geometry("700x450")
 
         self.create_widgets()
-        self.print_debug_config()
+        self.init_vfs()
 
         if self.script_path:
             self.root.after(100, self.run_startup_script)
@@ -49,11 +52,20 @@ class ShellEmulator:
 
         self.print_output("Welcome to Shell Emulator. Type 'help' for info.\n")
 
-    def print_debug_config(self) -> None:
-        """Display startup configuration parameters for debugging."""
+    def init_vfs(self) -> None:
+        """Load VFS from disk into memory and display startup config."""
         self.print_output("--- Configuration Parameters ---\n")
         self.print_output(f"VFS Path: {self.vfs_path}\n")
         self.print_output(f"Startup Script: {self.script_path}\n")
+        if self.vfs_path:
+            try:
+                self.vfs.load_from_disk(self.vfs_path)
+                dirs, files = self.vfs.count_nodes()
+                self.print_output(
+                    f"VFS loaded in memory ({dirs} dirs, {files} files).\n"
+                )
+            except FileNotFoundError as exc:
+                self.print_output(f"VFS Error: {exc}\n")
         self.print_output("--------------------------------\n")
         if not self.script_path:
             self.print_prompt()
@@ -65,11 +77,16 @@ class ShellEmulator:
         self.text_area.see(tk.END)
         self.text_area.configure(state="disabled")
 
+    def get_cwd_str(self) -> str:
+        """Return formatted current working directory path in VFS."""
+        return "/" + "/".join(self.cwd)
+
     def print_prompt(self) -> None:
-        """Print the command line prompt."""
+        """Print the command line prompt with current VFS path."""
         user = getpass.getuser()
         host = socket.gethostname()
-        self.print_output(f"{user}@{host}:~$ ")
+        path_str = "~" if not self.cwd else self.get_cwd_str()
+        self.print_output(f"{user}@{host}:{path_str}$ ")
 
     def handle_command_event(self, event: tk.Event) -> None:
         """Handle user input events triggered by pressing Enter."""
@@ -91,8 +108,7 @@ class ShellEmulator:
             return True
 
         parts = self.parse_command(line)
-        cmd = parts[0]
-        args = parts[1:]
+        cmd, args = parts[0], parts[1:]
 
         if cmd == "exit":
             self.root.quit()
@@ -100,14 +116,34 @@ class ShellEmulator:
         if cmd == "help":
             self.cmd_help()
             return True
-        if cmd in ("ls", "cd"):
-            self.print_output(f"Command: {cmd}, Arguments: {args}\n")
+        if cmd == "vfs-info":
+            self.cmd_vfs_info()
             return True
+        if cmd in ("ls", "cd"):
+            return self.handle_stub_vfs_cmd(cmd, args)
 
         self.print_output(
             f"Error: unknown command or invalid arguments: {cmd}\n"
         )
         return False
+
+    def handle_stub_vfs_cmd(self, cmd: str, args: list[str]) -> bool:
+        """Validate target path in VFS for stubbed ls and cd commands."""
+        target = args[0] if args else "."
+        node, _ = self.vfs.resolve_path(self.cwd, target)
+        if node is None:
+            self.print_output(f"{cmd}: {target}: No such file or directory\n")
+            return False
+        self.print_output(f"Command: {cmd}, Arguments: {args}\n")
+        return True
+
+    def cmd_vfs_info(self) -> None:
+        """Display memory status of the loaded Virtual File System."""
+        dirs, files = self.vfs.count_nodes()
+        source = self.vfs.loaded_from or "Empty in-memory root"
+        self.print_output(
+            f"VFS Source: {source}\nDirectories: {dirs}, Files: {files}\n"
+        )
 
     def run_startup_script(self) -> None:
         """Execute commands from startup script, stopping on first error."""
@@ -119,8 +155,8 @@ class ShellEmulator:
             self.print_prompt()
             return
 
-        with open(self.script_path, "r", encoding="utf-8") as file:
-            for line_num, raw_line in enumerate(file, start=1):
+        with open(self.script_path, "r", encoding="utf-8") as file_obj:
+            for line_num, raw_line in enumerate(file_obj, start=1):
                 line = raw_line.strip()
                 if not line:
                     continue
@@ -134,15 +170,15 @@ class ShellEmulator:
                     break
                 if line == "exit":
                     return
-
         self.print_prompt()
 
     def cmd_help(self) -> None:
         """Display list of available commands and descriptions."""
         help_text = (
             "Available commands:\n"
-            "  ls [args] - List directory contents (stub)\n"
-            "  cd [args] - Change directory (stub)\n"
+            "  ls [path] - List directory contents (stub with VFS check)\n"
+            "  cd [path] - Change directory (stub with VFS check)\n"
+            "  vfs-info  - Show in-memory VFS statistics\n"
             "  help      - Show this help message\n"
             "  exit      - Exit the emulator\n"
         )

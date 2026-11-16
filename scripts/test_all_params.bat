@@ -1,6 +1,6 @@
 @echo off
 echo Testing VFS and valid startup script...
-python src/emulator.py --vfs ./vfs_root --script scripts/startup_valid.txt
+python -m src.emulator --vfs ./vfs_root --script scripts/startup_valid.txt
 
 echo Testing startup script halting on first error...
-python src/emulator.py --vfs ./vfs_root --script scripts/startup_error.txt
+python -m src.emulator --vfs ./vfs_root --script scripts/startup_error.txt

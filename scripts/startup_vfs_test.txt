@@ -1,0 +1,6 @@
+help
+vfs-info
+ls
+ls level1/level2/level3
+cd level1/level2
+ls nonexistent_folder

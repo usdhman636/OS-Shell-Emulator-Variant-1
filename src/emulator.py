@@ -113,6 +113,8 @@ class ShellEmulator:
             "pwd": lambda: commands.cmd_pwd(self.cwd, args),
             "who": lambda: commands.cmd_who(args),
             "du": lambda: commands.cmd_du(self.vfs, self.cwd, args),
+            "chmod": lambda: commands.cmd_chmod(self.vfs, self.cwd, args),
+            "cp": lambda: commands.cmd_cp(self.vfs, self.cwd, args),
             "vfs-info": lambda: (True, self.get_vfs_info()),
             "help": lambda: (True, self.get_help_text()),
         }
@@ -180,14 +182,16 @@ class ShellEmulator:
         """Return formatted list of all available commands."""
         return (
             "Available commands:\n"
-            "  ls [-l] [path] - List directory contents\n"
-            "  cd [path]      - Change current working directory\n"
-            "  pwd            - Print current working directory\n"
-            "  du [-s] [path] - Estimate file and directory space usage\n"
-            "  who            - Show who is logged on\n"
-            "  vfs-info       - Show in-memory VFS statistics\n"
-            "  help           - Show this help message\n"
-            "  exit           - Exit the emulator\n"
+            "  ls [-l] [path]       - List directory contents\n"
+            "  cd [path]            - Change current working directory\n"
+            "  pwd                  - Print current working directory\n"
+            "  du [-s] [path]       - Estimate space usage in bytes\n"
+            "  who                  - Show who is logged on\n"
+            "  chmod <mode> <path>  - Change file or directory permissions\n"
+            "  cp [-r] <src> <dst>  - Copy files or directories in memory\n"
+            "  vfs-info             - Show in-memory VFS statistics\n"
+            "  help                 - Show this help message\n"
+            "  exit                 - Exit the emulator\n"
         )
 
 

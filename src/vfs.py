@@ -1,3 +1,4 @@
+import copy
 import os
 from dataclasses import dataclass, field
 
@@ -68,6 +69,12 @@ class VirtualFileSystem:
                 return None, parts
             node = node.children[part]
         return node, parts
+
+    def clone_node(self, node: VFSNode, new_name: str) -> VFSNode:
+        """Create a deep in-memory copy of a VFSNode with a new name."""
+        cloned = copy.deepcopy(node)
+        cloned.name = new_name
+        return cloned
 
     def count_nodes(self, node: VFSNode | None = None) -> tuple[int, int]:
         """Count total directories and files in memory."""

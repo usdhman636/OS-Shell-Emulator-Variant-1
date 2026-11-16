@@ -1,0 +1,14 @@
+help
+vfs-info
+ls
+pwd
+cp file1.txt /level1
+cd /level1
+ls
+chmod 755 file1.txt
+chmod u-x file1.txt
+ls -l
+cp -r level2 level1_backup
+vfs-info
+ls -l level1_backup
+chmod 999 file1.txt

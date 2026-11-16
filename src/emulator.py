@@ -1,23 +1,37 @@
+import argparse
 import getpass
 import os
 import socket
+import sys
 import tkinter as tk
 from tkinter import scrolledtext
 
 
 class ShellEmulator:
-    """Graphical OS shell emulator implementing a basic REPL."""
+    """Graphical OS shell emulator supporting CLI args and startup scripts."""
 
-    def __init__(self, root: tk.Tk) -> None:
-        """Initialize the main window and UI components."""
+    def __init__(
+        self,
+        root: tk.Tk,
+        vfs_path: str | None = None,
+        script_path: str | None = None,
+    ) -> None:
+        """Initialize the main window, debug config, and UI components."""
         self.root = root
+        self.vfs_path = vfs_path
+        self.script_path = script_path
+        self.script_error = False
+
         user = getpass.getuser()
         host = socket.gethostname()
         self.root.title(f"Эмулятор [{user}@{host}]")
         self.root.geometry("700x450")
 
-        self.history: list[str] = []
         self.create_widgets()
+        self.print_debug_config()
+
+        if self.script_path:
+            self.root.after(100, self.run_startup_script)
 
     def create_widgets(self) -> None:
         """Create and arrange graphical widgets in the window."""
@@ -26,13 +40,23 @@ class ShellEmulator:
         )
         self.text_area.pack(expand=True, fill="both", padx=5, pady=5)
 
-        self.entry = tk.Entry(self.root, bg="black", fg="lime", insertbackground="lime")
+        self.entry = tk.Entry(
+            self.root, bg="black", fg="lime", insertbackground="lime"
+        )
         self.entry.pack(fill="x", padx=5, pady=5)
         self.entry.bind("<Return>", self.handle_command_event)
         self.entry.focus()
 
-        self.print_output("Welcome to Shell Emulator. Type 'help' for commands.\n")
-        self.print_prompt()
+        self.print_output("Welcome to Shell Emulator. Type 'help' for info.\n")
+
+    def print_debug_config(self) -> None:
+        """Display startup configuration parameters for debugging."""
+        self.print_output("--- Configuration Parameters ---\n")
+        self.print_output(f"VFS Path: {self.vfs_path}\n")
+        self.print_output(f"Startup Script: {self.script_path}\n")
+        self.print_output("--------------------------------\n")
+        if not self.script_path:
+            self.print_prompt()
 
     def print_output(self, text: str) -> None:
         """Print text to the emulator terminal display."""
@@ -59,13 +83,12 @@ class ShellEmulator:
     def parse_command(self, line: str) -> list[str]:
         """Parse command line, expanding environment variables."""
         expanded = os.path.expandvars(line)
-        parts = expanded.split()
-        return parts
+        return expanded.split()
 
-    def execute_command(self, line: str) -> None:
-        """Execute parsed commands or report errors."""
+    def execute_command(self, line: str) -> bool:
+        """Execute parsed commands and return True if successful."""
         if not line:
-            return
+            return True
 
         parts = self.parse_command(line)
         cmd = parts[0]
@@ -73,16 +96,46 @@ class ShellEmulator:
 
         if cmd == "exit":
             self.root.quit()
-        elif cmd == "help":
+            return True
+        if cmd == "help":
             self.cmd_help()
-        elif cmd in ("ls", "cd"):
+            return True
+        if cmd in ("ls", "cd"):
+            self.print_output(f"Command: {cmd}, Arguments: {args}\n")
+            return True
+
+        self.print_output(
+            f"Error: unknown command or invalid arguments: {cmd}\n"
+        )
+        return False
+
+    def run_startup_script(self) -> None:
+        """Execute commands from startup script, stopping on first error."""
+        if not self.script_path or not os.path.isfile(self.script_path):
             self.print_output(
-                f"Command: {cmd}, Arguments: {args}\n"
+                f"Script Error: File not found: {self.script_path}\n"
             )
-        else:
-            self.print_output(
-                f"Error: unknown command or invalid arguments: {cmd}\n"
-            )
+            self.script_error = True
+            self.print_prompt()
+            return
+
+        with open(self.script_path, "r", encoding="utf-8") as file:
+            for line_num, raw_line in enumerate(file, start=1):
+                line = raw_line.strip()
+                if not line:
+                    continue
+                self.print_prompt()
+                self.print_output(f"{line}\n")
+                if not self.execute_command(line):
+                    self.print_output(
+                        f"Script halted at line {line_num} due to error.\n"
+                    )
+                    self.script_error = True
+                    break
+                if line == "exit":
+                    return
+
+        self.print_prompt()
 
     def cmd_help(self) -> None:
         """Display list of available commands and descriptions."""
@@ -96,7 +149,18 @@ class ShellEmulator:
         self.print_output(help_text)
 
 
+def parse_cli_args(argv: list[str]) -> argparse.Namespace:
+    """Parse command line arguments for VFS and startup script paths."""
+    parser = argparse.ArgumentParser(description="OS Shell Emulator")
+    parser.add_argument("--vfs", type=str, default=None, help="Path to VFS")
+    parser.add_argument(
+        "--script", type=str, default=None, help="Path to startup script"
+    )
+    return parser.parse_args(argv)
+
+
 if __name__ == "__main__":
+    args = parse_cli_args(sys.argv[1:])
     root = tk.Tk()
-    app = ShellEmulator(root)
+    app = ShellEmulator(root, vfs_path=args.vfs, script_path=args.script)
     root.mainloop()

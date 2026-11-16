@@ -1,0 +1,3 @@
+ls /dir
+invalid_cmd
+cd /home
